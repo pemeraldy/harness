@@ -4,16 +4,48 @@ from openai import OpenAI
 
 load_dotenv()
 
-MODEL = "gpt-4o-mini"
+# MODEL = "gpt-4o-mini"
+
+# Decide which backend to use based on which key is set in .env.
+# This is a configuration-time choice — change .env, not code.
+if os.getenv("KIMI_API_KEY"):
+    MODEL = "kimi-k2.6"
+    client = OpenAI(
+        api_key=os.getenv("KIMI_API_KEY"),
+        base_url=os.getenv("KIMI_BASE_URL"),
+    )
+    # K2.6 supports thinking and non-thinking modes. We disable thinking
+    # to keep response shape identical to OpenAI — no reasoning_content
+    # to handle, no preservation requirements in multi-turn dispatch.
+    EXTRA_BODY = {"thinking": {"type": "disabled"}}
+else:
+    MODEL = "gpt-4o-mini"
+    client = OpenAI()  # Reads OPENAI_API_KEY from environment, default base URL.
+    EXTRA_BODY = {}
 
 
-client = OpenAI()
+# client = OpenAI()
+
+SYSTEM_PROMPT = """
+You are a coding assistant running in a terminal, helping a developer with software engineering tasks.
+
+Be concise. Prefer short, direct answers over long ones. When the user asks for code, return the code with minimal explanation unless they ask for more.
+
+When returning code, use fenced code blocks and specify the language.
+
+You do not currently have access to any tools — you cannot read files, run commands, or modify anything on the user's system. If the user asks you to do something that would require a tool, say so plainly and suggest they describe the relevant content directly.or modify anything on the user's system. If the user asks you to do something that would require a tool, say so plainly and suggest they describe the relevant content directly.
+"""
 
 def run():
     """Run the agent's conversation loop until user quits. """
 
     # The conversation history
-    messages = []
+    messages = [
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT
+        }
+    ]
 
     print("Agent ready. Type 'quit' or 'exit' to leave. \n")
 
