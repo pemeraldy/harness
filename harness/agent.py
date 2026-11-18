@@ -1,6 +1,9 @@
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
+import json
+
+from harness.tools import registry
 
 load_dotenv()
 
@@ -74,16 +77,40 @@ def run():
         response = client.chat.completions.create(
             model=MODEL,
             messages=messages,
+            tools= registry.get_schemas()
         )
 
         # 5. Extract the assistant's reply
-        assistant_message = response.choices[0].message.content
+        assistant_message = response.choices[0].message
 
-        # 6. Append the assistant's reply to the history
-        messages.append({"role": "assistant", "content": assistant_message})
+        if assistant_message.tool_calls:
+            messages.append(assistant_message)
 
-        # 7. show user chats
-        print(f"\nagent >  {assistant_message}\n")
+            for call in assistant_message.tool_calls:
+                arguments = json.loads(call.function.arguments)
+                result = registry.dispatch(call.function.name, arguments)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": call.id,
+                    "content": result
+                })
+
+        # Step 3: re-call the model now that the tool results are in
+        # context. This second call produces the model's final text reply.
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            tools=registry.get_schemas(),
+        )
+
+        assistant_message = response.choices[0].message
+        assistant_text = assistant_message.content
+        messages.append({
+            "role": "assistant",
+            "content": assistant_text,
+        })
+
+        print(f"\nagent > {assistant_text}\n")
 
 
 
