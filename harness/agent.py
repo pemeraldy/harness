@@ -36,7 +36,7 @@ SYSTEM_PROMPT = """
 
     When returning code, use fenced code blocks and specify the language.
 
-    You have access to five filesystem tools — read, write, list, mkdir, delete — operating on a workspace directory. Use them whenever a task involves reading, modifying, or organizing files. Paths are relative to
+    You have access to five filesystem tools — read, write, list_dir, mkdir, delete — operating on a workspace directory. Use them whenever a task involves reading, modifying, or organizing files. Paths are relative to
     the workspace root. Prefer reading and writing real files over describing them in conversation.
 """
 
@@ -73,45 +73,18 @@ def run():
             "content": user_input
         })
 
-        # 4. Call model with the full conversation
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            tools= registry.get_schemas()
-        )
+        # 4. Call the model, running any requested tools, until it gives a final reply
+        while True:
+            response = client.chat.completions.create(model=MODEL, messages=messages, tools=registry.get_schemas())
+            msg = response.choices[0].message
+            messages.append(msg)
+            if not msg.tool_calls:
+                break
+            for call in msg.tool_calls:
+                result = registry.dispatch(call.function.name, json.loads(call.function.arguments))
+                messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
 
-        # 5. Extract the assistant's reply
-        assistant_message = response.choices[0].message
-
-        if assistant_message.tool_calls:
-            messages.append(assistant_message)
-
-            for call in assistant_message.tool_calls:
-                arguments = json.loads(call.function.arguments)
-                result = registry.dispatch(call.function.name, arguments)
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": call.id,
-                    "content": result
-                })
-
-        # Step 3: re-call the model now that the tool results are in
-        # context. This second call produces the model's final text reply.
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            tools=registry.get_schemas(),
-        )
-
-        assistant_message = response.choices[0].message
-        assistant_text = assistant_message.content
-        messages.append({
-            "role": "assistant",
-            "content": assistant_text,
-        })
-
-        print(f"\nagent > {assistant_text}\n")
-
+        print(f"\nagent > {msg.content}\n")
 
 
 if __name__ == "__main__":
