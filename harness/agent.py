@@ -1,8 +1,12 @@
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
+import json
+
+from harness.tools import registry
 
 load_dotenv()
+
 
 # MODEL = "gpt-4o-mini"
 
@@ -23,17 +27,17 @@ else:
     client = OpenAI()  # Reads OPENAI_API_KEY from environment, default base URL.
     EXTRA_BODY = {}
 
-
 # client = OpenAI()
 
 SYSTEM_PROMPT = """
-You are a coding assistant running in a terminal, helping a developer with software engineering tasks.
+    You are a coding assistant running in a terminal, helping a developer with software engineering tasks.
 
-Be concise. Prefer short, direct answers over long ones. When the user asks for code, return the code with minimal explanation unless they ask for more.
+    Be concise. Prefer short, direct answers over long ones. When the user asks for code, return the code with minimal explanation unless they ask for more.
 
-When returning code, use fenced code blocks and specify the language.
+    When returning code, use fenced code blocks and specify the language.
 
-You do not currently have access to any tools — you cannot read files, run commands, or modify anything on the user's system. If the user asks you to do something that would require a tool, say so plainly and suggest they describe the relevant content directly.or modify anything on the user's system. If the user asks you to do something that would require a tool, say so plainly and suggest they describe the relevant content directly.
+    You have access to five filesystem tools — read, write, list, mkdir, delete — operating on a workspace directory. Use them whenever a task involves reading, modifying, or organizing files. Paths are relative to
+    the workspace root. Prefer reading and writing real files over describing them in conversation.
 """
 
 def run():
@@ -58,7 +62,7 @@ def run():
         if user_input in {"quit", "exit"}:
             print("GoodBye")
             break
-        
+       
         # Skip empty lines
         if not user_input:
             continue
@@ -73,16 +77,40 @@ def run():
         response = client.chat.completions.create(
             model=MODEL,
             messages=messages,
+            tools= registry.get_schemas()
         )
 
         # 5. Extract the assistant's reply
-        assistant_message = response.choices[0].message.content
+        assistant_message = response.choices[0].message
 
-        # 6. Append the assistant's reply to the history
-        messages.append({"role": "assistant", "content": assistant_message})
+        if assistant_message.tool_calls:
+            messages.append(assistant_message)
 
-        # 7. show user chats
-        print(f"\nagent >  {assistant_message}\n")
+            for call in assistant_message.tool_calls:
+                arguments = json.loads(call.function.arguments)
+                result = registry.dispatch(call.function.name, arguments)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": call.id,
+                    "content": result
+                })
+
+        # Step 3: re-call the model now that the tool results are in
+        # context. This second call produces the model's final text reply.
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            tools=registry.get_schemas(),
+        )
+
+        assistant_message = response.choices[0].message
+        assistant_text = assistant_message.content
+        messages.append({
+            "role": "assistant",
+            "content": assistant_text,
+        })
+
+        print(f"\nagent > {assistant_text}\n")
 
 
 
