@@ -2,25 +2,31 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 import json
+import readline, atexit  # noqa: F401  — enables arrow keys, history, line editing in input()
 
 from harness.tools import registry
+
+HISTORY_FILE = os.path.expanduser("~/.agent_history")
+
+try:
+    readline.read_history_file(HISTORY_FILE)
+except FileNotFoundError:
+    pass
+
+readline.set_history_length(1000)
+
 
 load_dotenv()
 
 
 # MODEL = "gpt-4o-mini"
 
-# Decide which backend to use based on which key is set in .env.
-# This is a configuration-time choice — change .env, not code.
 if os.getenv("KIMI_API_KEY"):
     MODEL = "kimi-k2.6"
     client = OpenAI(
         api_key=os.getenv("KIMI_API_KEY"),
         base_url=os.getenv("KIMI_BASE_URL"),
     )
-    # K2.6 supports thinking and non-thinking modes. We disable thinking
-    # to keep response shape identical to OpenAI — no reasoning_content
-    # to handle, no preservation requirements in multi-turn dispatch.
     EXTRA_BODY = {"thinking": {"type": "disabled"}}
 else:
     MODEL = "gpt-4o-mini"
@@ -36,8 +42,15 @@ SYSTEM_PROMPT = """
 
     When returning code, use fenced code blocks and specify the language.
 
-    You have access to five filesystem tools — read, write, list_dir, mkdir, delete — operating on a workspace directory. Use them whenever a task involves reading, modifying, or organizing files. Paths are relative to
+    You have access to five filesystem tools — read, write, list, mkdir, delete — operating on a workspace directory. Use them whenever a task involves reading, modifying, or organizing files. Paths are relative to
     the workspace root. Prefer reading and writing real files over describing them in conversation.
+
+    You also have six git tools — git_status, git_diff, git_log, git_commit, git_checkout, git_branch — for versioning your work. The workspace is
+    already initialized as a git repo. Use git to:
+    - Commit frequently. Small, focused commits are easier to roll back.
+    - Commit before doing anything risky (large rewrites, deleting files, restructuring). A commit before the risky step gives you a recovery point.
+    - Write meaningful commit messages — describe what changed and why, in the present tense (e.g., "add user authentication module").
+    - Branch experiments. When trying an alternative approach, create a branch first so the main line of work stays intact.
 """
 
 def run():
@@ -85,7 +98,6 @@ def run():
                 messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
 
         print(f"\nagent > {msg.content}\n")
-
 
 if __name__ == "__main__":
     run()
