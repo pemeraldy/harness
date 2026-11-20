@@ -41,5 +41,44 @@ if not (WORKSPACE / ".git").exists():
 
 @tool
 def git_status() -> str:
-    """SHow the current working directory, list modified, staged, and untracked files"""
+    """Show the current working directory, list modified, staged, and untracked files"""
     return _run_git("status")
+
+@tool
+def git_commit(commit_message: str) -> str:
+    """Stage all current changes and commit them with the given message.
+        Returns the commit hash on success, or an error on failure (e.g., nothing to commit).
+    """
+    _run_git("add", "-A")
+    return _run_git("commit", "-m", commit_message)
+
+@tool
+def git_diff(path: str = "") -> str:
+    """Show unstaged changes in the workspace. Optionally restrict to a single path."""
+    args = ["diff"]
+    if path:
+        args.append(path)
+
+    return _run_git(*args)
+
+@tool
+def git_log(limit: int = 10) -> str:
+    """Show recent commit history. Defaults to the last 10 commits."""   
+    return _run_git("log", f"--max-count={limit}", "--oneline")
+
+
+@tool
+def git_checkout(ref: str) -> str:
+    """Switch to a commit or branch. Used for both rollback (to an earlier commit)
+    and branch switching (to a sibling branch)."""    
+    return _run_git("checkout", ref)
+
+@tool
+def git_branch(name: str = "") -> str:
+    """List branches if called with no argument. Create a new branch if a name is given.
+    Does NOT switch to the new branch — call git_checkout afterward to switch."""
+
+    if not name:
+        return _run_git("branch")
+    
+    return _run_git("branch", name)
