@@ -11,6 +11,8 @@ def _resolve_path(path: str) -> Path:
 
     if not target.is_relative_to(WORKSPACE):
         raise ValueError(f"path escapes workspace: {path}")
+    if any(part.lower() == ".git" for part in target.relative_to(WORKSPACE).parts):
+        raise ValueError(f"access not allowed to this path: {path}")
     
     return target
 
