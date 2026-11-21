@@ -10,7 +10,7 @@ def _resolve_path(path: str) -> Path:
     target = (WORKSPACE / path).resolve()
 
     if not target.is_relative_to(WORKSPACE):
-        raise ValueError(f"path  escapes workspace: {path}")
+        raise ValueError(f"path escapes workspace: {path}")
     
     return target
 
