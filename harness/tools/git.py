@@ -40,6 +40,18 @@ if not (WORKSPACE / ".git").exists():
 
 
 @tool
+def _check_args(value:str, what:str) -> str:
+    """Rejects empty values and values git would read as options"""
+    value = value.strip()
+
+    if not value:
+        raise ValueError(f"{what} must not be empty")
+    if value.startswith("-"):
+        raise ValueError(f"{what} must not start with '-': {value!r}")
+    return value
+
+
+@tool
 def git_status() -> str:
     """Show the current working directory, list modified, staged, and untracked files"""
     return _run_git("status")
@@ -62,15 +74,19 @@ def git_diff(path: str = "") -> str:
     return _run_git(*args)
 
 @tool
-def git_log(limit: int = 10) -> str:
+def git_log(limit: int = 10, ref: str = "") -> str:
     """Show recent commit history. Defaults to the last 10 commits."""   
-    return _run_git("log", f"--max-count={limit}", "--oneline")
+    args = ["log", f"--max-count={limit}", "--oneline"]
+    if ref:
+        args.append(_check_args(ref, "ref"))
+    return _run_git()
 
 
 @tool
 def git_checkout(ref: str) -> str:
     """Switch to a commit or branch. Used for both rollback (to an earlier commit)
     and branch switching (to a sibling branch)."""    
+    ref = _check_args(ref, "ref")
     return _run_git("checkout", ref)
 
 @tool
@@ -81,4 +97,5 @@ def git_branch(name: str = "") -> str:
     if not name:
         return _run_git("branch")
     
+    name = _check_args(name, "name")
     return _run_git("branch", name)
